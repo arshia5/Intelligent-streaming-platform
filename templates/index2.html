@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>YOLOv5 Live Streams</title>
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --bg: #f3f4f6;
+      --card-bg: #ffffff;
+      --text: #374151;
+      --text-light: #6b7280;
+      --border-radius: 0.5rem;
+      --gap: 1rem;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: var(--gap);
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: var(--gap);
+      font-size: 1.75rem;
+      color: var(--primary);
+    }
+
+    .streams {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: var(--gap);
+    }
+
+    .stream {
+      background: var(--card-bg);
+      border-radius: var(--border-radius);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      padding: var(--gap);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stream h2 {
+      margin-bottom: 0.5rem;
+      color: var(--primary);
+      font-size: 1.25rem;
+    }
+
+    label {
+      font-size: 0.9rem;
+      color: var(--text-light);
+      margin-bottom: 0.5rem;
+    }
+
+    select {
+      width: 100%;
+      padding: 0.4rem;
+      border: 1px solid #d1d5db;
+      border-radius: var(--border-radius);
+      margin-top: 0.25rem;
+      margin-bottom: var(--gap);
+      font-size: 0.9rem;
+      background: #fff;
+      color: var(--text);
+    }
+
+    button {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: var(--border-radius);
+      padding: 0.6rem;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-bottom: 0.5rem;
+    }
+    button:disabled {
+      background: #a5b4fc;
+      cursor: not-allowed;
+    }
+    button:not(:disabled):hover {
+      background: var(--primary-hover);
+    }
+
+    .status, .metrics {
+      font-size: 0.85rem;
+      color: var(--text-light);
+      margin-top: 0.5rem;
+    }
+
+    img {
+      width: 100%;
+      height: auto;
+      border-radius: var(--border-radius);
+      margin-top: var(--gap);
+      border: 1px solid #e5e7eb;
+      display: none;
+    }
+  </style>
+
+  <!-- MQTT over WebSockets -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/mqttws31.min.js"></script>
+  <script>
+    const mqttClient = new Paho.MQTT.Client("broker.hivemq.com", 8000, "web-client-" + Date.now());
+    mqttClient.connect({
+      onSuccess: () => {
+        ['webcam','ipcam'].forEach(src => {
+          mqttClient.subscribe(`yolo/events/${src}/metrics`);
+          mqttClient.subscribe(`yolo/events/${src}/control_ack`);
+        });
+      }
+    });
+    mqttClient.onMessageArrived = msg => {
+      const [ , , src, topic ] = msg.destinationName.split('/');
+      const data = JSON.parse(msg.payloadString);
+      if (topic === 'metrics') {
+        const mEl = document.getElementById(`${src}-metrics`);
+        mEl.textContent = `FPS: ${data.actual_fps} | Count: ${data.count} | Conf: ${data.avg_conf}`;
+      } else if (topic === 'control_ack') {
+        const sEl = document.getElementById(`${src}-status`);
+        sEl.textContent += ` | ↵${data.cmd}:${data.status}`;
+      }
+    };
+  </script>
+</head>
+<body>
+  <h1>Stream Control</h1>
+
+  <div class="streams">
+    <!-- Webcam Panel -->
+    <div class="stream" id="panel-webcam">
+      <h2>Webcam</h2>
+      <label>
+        Resolution
+        <select id="webcam-res">
+          <option value="256x144">144p</option>
+          <option value="426x240">240p</option>
+          <option value="640x360" selected>360p</option>
+          <option value="854x480">480p</option>
+          <option value="1280x720">720p</option>
+        </select>
+      </label>
+      <label>
+        FPS
+        <select id="webcam-fps">
+          <option>5</option>
+          <option>10</option>
+          <option>15</option>
+          <option>24</option>
+          <option selected>30</option>
+        </select>
+      </label>
+      <label>
+        Bitrate (JPEG Q)
+        <select id="webcam-br">
+          <option value="20">20%</option>
+          <option value="40">40%</option>
+          <option value="60" selected>60%</option>
+          <option value="80">80%</option>
+          <option value="100">100%</option>
+        </select>
+      </label>
+      <button id="webcam-start">Start</button>
+      <button id="webcam-stop" disabled>Stop</button>
+      <button id="webcam-detect" disabled>Enable Detection</button>
+      <button id="webcam-heat"   disabled>Enable Heatmap</button>
+      <div class="status"  id="webcam-status">
+        Stream: stopped | Detect: off | Heatmap: off
+      </div>
+      <div class="metrics" id="webcam-metrics">
+        FPS: – | Count: – | Conf: –
+      </div>
+      <img id="webcam-img" alt="Webcam stream">
+    </div>
+
+    <!-- IP Cam Panel -->
+    <div class="stream" id="panel-ipcam">
+      <h2>IP Cam</h2>
+      <label>
+        Resolution
+        <select id="ipcam-res">
+          <option value="256x144">144p</option>
+          <option value="426x240">240p</option>
+          <option value="640x360" selected>360p</option>
+          <option value="854x480">480p</option>
+          <option value="1280x720">720p</option>
+        </select>
+      </label>
+      <label>
+        FPS
+        <select id="ipcam-fps">
+          <option>5</option>
+          <option>10</option>
+          <option>15</option>
+          <option>24</option>
+          <option selected>30</option>
+        </select>
+      </label>
+      <label>
+        Bitrate (JPEG Q)
+        <select id="ipcam-br">
+          <option value="20">20%</option>
+          <option value="40">40%</option>
+          <option value="60" selected>60%</option>
+          <option value="80">80%</option>
+          <option value="100">100%</option>
+        </select>
+      </label>
+      <button id="ipcam-start">Start</button>
+      <button id="ipcam-stop" disabled>Stop</button>
+      <button id="ipcam-detect" disabled>Enable Detection</button>
+      <button id="ipcam-heat"   disabled>Enable Heatmap</button>
+      <div class="status"  id="ipcam-status">
+        Stream: stopped | Detect: off | Heatmap: off
+      </div>
+      <div class="metrics" id="ipcam-metrics">
+        FPS: – | Count: – | Conf: –
+      </div>
+      <img id="ipcam-img" alt="IP camera stream">
+    </div>
+  </div>
+
+  <script>
+    ['webcam','ipcam'].forEach(src => {
+      const resSel    = document.getElementById(`${src}-res`);
+      const fpsSel    = document.getElementById(`${src}-fps`);
+      const brSel     = document.getElementById(`${src}-br`);
+      const startBtn  = document.getElementById(`${src}-start`);
+      const stopBtn   = document.getElementById(`${src}-stop`);
+      const detBtn    = document.getElementById(`${src}-detect`);
+      const heatBtn   = document.getElementById(`${src}-heat`);
+      const img       = document.getElementById(`${src}-img`);
+      const statusEl  = document.getElementById(`${src}-status`);
+      const metricsEl = document.getElementById(`${src}-metrics`);
+
+      function reflectConfig(stat) {
+        statusEl.textContent =
+          `Stream: ${stat.stream} | Detect: ${stat.detect} | Heatmap: ${stat.heatmap}`;
+        startBtn.disabled = stat.stream === 'running';
+        stopBtn.disabled  = stat.stream !== 'running';
+        detBtn.disabled   = stat.stream !== 'running';
+        heatBtn.disabled  = stat.stream !== 'running';
+        detBtn.textContent  = stat.detect==='on' ? 'Disable Detection' : 'Enable Detection';
+        heatBtn.textContent = stat.heatmap==='on'? 'Disable Heatmap' : 'Enable Heatmap';
+        img.style.display   = stat.stream==='running'? 'block' : 'none';
+      }
+
+      function reflectMetrics(mets) {
+        metricsEl.textContent =
+          `FPS: ${mets.actual_fps} | Count: ${mets.avg_det_count} | Conf: ${mets.avg_det_conf}`;
+      }
+
+      async function getSystemStatus() {
+        const res = await fetch('/system/status');
+        const j   = await res.json();
+        reflectConfig(j.status[src]);
+        reflectMetrics(j.metrics[src]);
+      }
+
+      startBtn.onclick = async () => {
+        await fetch(`/stream/${src}/start`, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            resolution: resSel.value,
+            fps:        +fpsSel.value,
+            bitrate:    +brSel.value
+          })
+        });
+        img.src = `/video/${src}?_=${Date.now()}`;
+        getSystemStatus();
+      };
+      stopBtn.onclick = async () => { await fetch(`/stream/${src}/stop`, {method:'POST'}); getSystemStatus(); };
+      detBtn.onclick  = async () => {
+        const action = detBtn.textContent.includes('Enable') ? 'detect_on' : 'detect_off';
+        await fetch(`/stream/${src}/${action}`, {method:'POST'});
+        getSystemStatus();
+      };
+      heatBtn.onclick = async () => {
+        const action = heatBtn.textContent.includes('Enable') ? 'heat_on' : 'heat_off';
+        await fetch(`/stream/${src}/${action}`, {method:'POST'});
+        getSystemStatus();
+      };
+
+      setInterval(getSystemStatus, 2000);
+      getSystemStatus();
+    });
+  </script>
+</body>
+</html>

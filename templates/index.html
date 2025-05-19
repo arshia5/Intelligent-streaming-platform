@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>YOLOv5 Live Streams</title>
+  <style>
+    body { font-family: sans-serif; }
+    .stream { display: inline-block; margin: 1rem; vertical-align: top; }
+    img     { border: 2px solid #444; display: block; }
+    button, select { margin: 0.3rem 0; width: 100%; }
+    .status, .metrics { font-size: 0.9rem; color: #333; margin-top: 0.3rem; }
+  </style>
+</head>
+<body>
+  <h1>YOLOv5 Stream Control (≤720p, ≤30 fps)</h1>
+
+  <!-- Webcam Panel -->
+  <div class="stream" id="panel-webcam">
+    <h2>Webcam</h2>
+    <label>Resolution:
+      <select id="webcam-res">
+        <option value="256x144">144p</option>
+        <option value="426x240">240p</option>
+        <option value="640x360" selected>360p</option>
+        <option value="854x480">480p</option>
+        <option value="1280x720">720p</option>
+      </select>
+    </label>
+    <label>FPS:
+      <select id="webcam-fps">
+        <option>5</option>
+        <option>10</option>
+        <option>15</option>
+        <option>24</option>
+        <option selected>30</option>
+      </select>
+    </label>
+    <label>Bitrate (JPEG Q):
+      <select id="webcam-br">
+        <option value="20">20%</option>
+        <option value="40">40%</option>
+        <option value="60" selected>60%</option>
+        <option value="80">80%</option>
+        <option value="100">100%</option>
+      </select>
+    </label>
+
+    <button id="webcam-start">Start</button>
+    <button id="webcam-stop" disabled>Stop</button>
+    <button id="webcam-detect" disabled>Enable Detection</button>
+    <button id="webcam-heat" disabled>Enable Heatmap</button>
+    <div class="status"  id="webcam-status">
+      Stream: stopped | Detect: off | Heatmap: off
+    </div>
+    <div class="metrics" id="webcam-metrics">
+      FPS: – | Avg Det Count: – | Avg Det Conf: –
+    </div>
+    <img id="webcam-img" width="320">
+  </div>
+
+  <!-- IP Cam Panel -->
+  <div class="stream" id="panel-ipcam">
+    <h2>IP Cam</h2>
+    <label>Resolution:
+      <select id="ipcam-res">
+        <option value="256x144">144p</option>
+        <option value="426x240">240p</option>
+        <option value="640x360" selected>360p</option>
+        <option value="854x480">480p</option>
+        <option value="1280x720">720p</option>
+      </select>
+    </label>
+    <label>FPS:
+      <select id="ipcam-fps">
+        <option>5</option>
+        <option>10</option>
+        <option>15</option>
+        <option>24</option>
+        <option selected>30</option>
+      </select>
+    </label>
+    <label>Bitrate (JPEG Q):
+      <select id="ipcam-br">
+        <option value="20">20%</option>
+        <option value="40">40%</option>
+        <option value="60" selected>60%</option>
+        <option value="80">80%</option>
+        <option value="100">100%</option>
+      </select>
+    </label>
+
+    <button id="ipcam-start">Start</button>
+    <button id="ipcam-stop" disabled>Stop</button>
+    <button id="ipcam-detect" disabled>Enable Detection</button>
+    <button id="ipcam-heat" disabled>Enable Heatmap</button>
+    <div class="status"  id="ipcam-status">
+      Stream: stopped | Detect: off | Heatmap: off
+    </div>
+    <div class="metrics" id="ipcam-metrics">
+      FPS: – | Avg Det Count: – | Avg Det Conf: –
+    </div>
+    <img id="ipcam-img" width="320">
+  </div>
+
+  <script>
+    ['webcam','ipcam'].forEach(src => {
+      const resSel   = document.getElementById(`${src}-res`);
+      const fpsSel   = document.getElementById(`${src}-fps`);
+      const brSel    = document.getElementById(`${src}-br`);
+      const startBtn = document.getElementById(`${src}-start`);
+      const stopBtn  = document.getElementById(`${src}-stop`);
+      const detBtn   = document.getElementById(`${src}-detect`);
+      const heatBtn  = document.getElementById(`${src}-heat`);
+      const img      = document.getElementById(`${src}-img`);
+      const statusEl = document.getElementById(`${src}-status`);
+      const metricsEl= document.getElementById(`${src}-metrics`);
+
+      function reflectConfig(stat) {
+        statusEl.textContent =
+          `Stream: ${stat.stream} | Detect: ${stat.detect} | Heatmap: ${stat.heatmap}`;
+        startBtn.disabled  = stat.stream === 'running';
+        stopBtn.disabled   = stat.stream !== 'running';
+        detBtn.disabled    = stat.stream !== 'running';
+        heatBtn.disabled   = stat.stream !== 'running';
+        detBtn.textContent = stat.detect === 'on'? 'Disable Detection':'Enable Detection';
+        heatBtn.textContent= stat.heatmap==='on'? 'Disable Heatmap':'Enable Heatmap';
+        img.style.display  = stat.stream==='running'? 'block':'none';
+      }
+
+      function reflectMetrics(mets) {
+        metricsEl.textContent =
+          `FPS: ${mets.actual_fps} | Avg Det Count: ${mets.avg_det_count} | Avg Det Conf: ${mets.avg_det_conf}`;
+      }
+
+      async function getSystemStatus() {
+        const res = await fetch('/system/status');
+        const j   = await res.json();
+        const c   = j.status[src];
+        const m   = j.metrics[src];
+        reflectConfig(c);
+        reflectMetrics(m);
+      }
+
+      startBtn.onclick = async () => {
+        await fetch(`/stream/${src}/start`, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            resolution: resSel.value,
+            fps:        +fpsSel.value,
+            bitrate:    +brSel.value
+          })
+        });
+        img.src = `/video/${src}?_=${Date.now()}`;
+        getSystemStatus();
+      };
+      stopBtn.onclick  = async () => { await fetch(`/stream/${src}/stop`, {method:'POST'}); getSystemStatus(); };
+      detBtn.onclick   = async () => {
+        const a = detBtn.textContent.includes('Enable') ? 'detect_on':'detect_off';
+        await fetch(`/stream/${src}/${a}`, {method:'POST'}); getSystemStatus();
+      };
+      heatBtn.onclick  = async () => {
+        const a = heatBtn.textContent.includes('Enable') ? 'heat_on':'heat_off';
+        await fetch(`/stream/${src}/${a}`, {method:'POST'}); getSystemStatus();
+      };
+
+      // periodically refresh both config & metrics
+      setInterval(getSystemStatus, 2000);
+      getSystemStatus();
+    });
+  </script>
+</body>
+</html>

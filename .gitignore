@@ -1,0 +1,9 @@
+# Ignore Python virtual environments
+gst_env/
+
+# Ignore output or temp folders
+output/
+__pycache__/
+
+#old files
+old/
