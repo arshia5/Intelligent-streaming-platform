@@ -141,7 +141,6 @@ You can also listen to feedback:
 
 ```bash
 mosquitto_sub -t "yolo/events/webcam/metrics"
-mosquitto_sub -t "yolo/events/webcam/control_ack"
 ```
 
 ---
